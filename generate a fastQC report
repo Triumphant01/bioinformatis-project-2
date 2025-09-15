@@ -1,0 +1,10 @@
+#generate a fastQC Report
+
+#download a sample fastQ file
+wget https://github.com/rieseberglab/fastq-examples/raw/refs/heads/master/data/HI.4019.002.index_7.ANN0831_R1.fastq.gz
+
+#Run FastQC on the file
+fastqc HI.4019.002.index_7.ANN0831_R1.fastq.gz
+
+#Locate the generated .html and .zip report files in the current directory.
+cloudshell download HI.4019.002.index_7.ANN0831_R1_fastqc.*
