@@ -1,0 +1,31 @@
+
+
+# Step 1: Create directories
+mkdir -p repaired alignment_map
+
+# Step 2: Prepare the reference genome
+bwa index references/reference.fasta
+
+# Step 3: List of samples
+samples=("ACBarrie" "Alsen" "Baxter" "Chara" "Drysdale")
+
+# Step 4: Repair paired-end reads for each sample
+for sample in "${samples[@]}"
+do
+    repair.sh \
+        in1=${sample}_R1.fastq.gz \
+        in2=${sample}_R2.fastq.gz \
+        out1=repaired/${sample}_R1_repaired.fq.gz \
+        out2=repaired/${sample}_R2_repaired.fq.gz \
+        outs=repaired/${sample}_singletons.fq.gz
+done
+
+# Step 5: Map repaired reads to reference genome and convert to BAM
+for sample in "${samples[@]}"
+do
+    bwa mem references/reference.fasta \
+        repaired/${sample}_R1_repaired.fq.gz \
+        repaired/${sample}_R2_repaired.fq.gz \
+    | samtools view -b -o alignment_map/${sample}.bam
+done
+
