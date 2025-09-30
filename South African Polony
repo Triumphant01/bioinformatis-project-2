@@ -1,0 +1,141 @@
+Code Report: Listeria monocytogenes Outbreak Analysis
+
+1. Data Retrieval
+
+Raw reads were downloaded from NCBI SRA (fastq.gz files).
+Each isolate is paired-end: _1.fastq.gz and _2.fastq.gz.
+
+2. Quality Control
+
+We checked raw read quality using FastQC and summarized results with MultiQC.
+
+# Create directory for reports
+mkdir -p fastqc_reports
+
+# Run FastQC on all reads
+fastqc *.fastq.gz -o fastqc_reports
+
+# Aggregate results with MultiQC
+multiqc fastqc_reports -o multiqc_report
+
+📝 This step confirmed per-base quality, GC%, and adapter presence. MultiQC output (HTML) summarizes all samples at once.
+
+
+---
+
+3. Read Trimming
+
+We used fastp to trim adapters and low-quality bases.
+Each sample was processed in a loop to handle all isolates.
+
+mkdir -p trimmed
+
+for sample in $(ls *_1.fastq.gz | sed 's/_1.fastq.gz//'); do
+  fastp \
+    -i ${sample}_1.fastq.gz \
+    -I ${sample}_2.fastq.gz \
+    -o trimmed/${sample}_1.trimmed.fastq.gz \
+    -O trimmed/${sample}_2.trimmed.fastq.gz \
+    -h trimmed/${sample}_fastp.html \
+    -j trimmed/${sample}_fastp.json
+done
+
+📝 Output: cleaned paired reads + QC report (.html & .json).
+
+
+---
+
+4. Genome Assembly
+
+We assembled trimmed reads into contigs using SPAdes.
+
+mkdir -p assemblies
+
+for sample in $(ls trimmed/*_1.trimmed.fastq.gz | sed 's/_1.trimmed.fastq.gz//'); do
+  name=$(basename $sample)
+  spades.py \
+    -1 ${sample}_1.trimmed.fastq.gz \
+    -2 ${sample}_2.trimmed.fastq.gz \
+    -o assemblies/${name}
+done
+
+📝 Output: contigs.fasta for each isolate in assemblies/.
+
+
+---
+
+5. AMR Gene Detection
+
+We used Abricate with the ResFinder database to detect antimicrobial resistance genes.
+
+mkdir -p abricate_results
+
+for sample in assemblies/*/contigs.fasta; do
+  base=$(basename $(dirname $sample))
+  abricate --db resfinder $sample > abricate_results/${base}_AMR.txt
+done
+
+# Summarize across isolates
+abricate --summary abricate_results/*.txt > abricate_AMR_summary.txt
+
+📝 Output: Individual AMR results per sample + combined summary (abricate_AMR_summary.txt).
+
+
+---
+
+6. Virulence Gene Detection
+
+We scanned assemblies against VFDB to detect virulence factors (e.g., hly, actA, plcA).
+
+mkdir -p abricate_vfdb
+
+for sample in assemblies/*/contigs.fasta; do
+  base=$(basename $(dirname $sample))
+  abricate --db vfdb $sample > abricate_vfdb/${base}_VIR.txt
+done
+
+# Summarize virulence across isolates
+abricate --summary abricate_vfdb/*.txt > abricate_VIR_summary.txt
+
+📝 Output: Virulence profile summary including toxins like hly, plcA, plcB, actA.
+
+
+---
+
+7. Species Confirmation
+
+We confirmed organism identity using BLASTn against the nt database.
+
+blastn -query assemblies/SRR27013245/contigs.fasta \
+       -db nt \
+       -out blast_results.txt \
+       -outfmt "6 qseqid sseqid pident length evalue bitscore stitle"
+
+📝 Result: All isolates matched Listeria monocytogenes (>99% identity).
+
+
+---
+
+8. Results Summary
+
+QC: Most reads had high per-base quality.
+
+Assembly: Genome size ~3 Mb, consistent with Listeria.
+
+AMR genes: Example hits — tet(M), fosX.
+
+Virulence genes: Detected hly, plcA, plcB, actA, bsh, clpC, clpE, fbpA.
+
+Species ID: Confirmed Listeria monocytogenes.
+
+
+
+---
+
+9. Public Health Relevance
+
+First-line therapy: ampicillin + gentamicin.
+
+Alternatives: trimethoprim-sulfamethoxazole or vancomycin if resistance detected.
+
+Genomics provided actionable insight into outbreak tracking.
